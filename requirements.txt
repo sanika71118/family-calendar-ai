@@ -6,3 +6,8 @@ numpy
 tabulate
 openai
 langchain openai
+
+
+
+
+pip install fastapi uvicorn streamlit pandas numpy tabulate openai langchain openai

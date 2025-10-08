@@ -1,10 +1,13 @@
 from backend.task_manager import (
     add_task, view_tasks, mark_task_complete,
-    update_task, delete_task, clear_all_tasks, get_recurring_suggestions
+    update_task, delete_task, clear_all_tasks, get_recurring_suggestions,
+    init_db  # 👈 add this
 )
+
 from backend.ai_agent import suggest_priority, extract_priority
 
 def main():
+    init_db()
     user_email = input("Enter your email for reminders (optional): ").strip() or None
 
     while True:
