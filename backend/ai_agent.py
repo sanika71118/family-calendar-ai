@@ -6,17 +6,16 @@ from dotenv import load_dotenv
 # ----------------- API Initialization -----------------
 load_dotenv()
 api_key = os.getenv("OPENAI_API_KEY")
+
 if not api_key:
-    raise ValueError(" Missing OPENAI_API_KEY in .env file.")
+    raise ValueError("❌ Missing OPENAI_API_KEY in .env file. Please add it before running.")
+
 client = OpenAI(api_key=api_key)
 
 
 # ----------------- Helper: Safe Date Parsing -----------------
 def safe_parse_date(date_str):
-    """
-    Safely parse a date string in YYYY-MM-DD format.
-    Returns a datetime.date object or None if invalid.
-    """
+    """Safely parse a date string (YYYY-MM-DD) and return datetime object."""
     try:
         return datetime.strptime(date_str, "%Y-%m-%d")
     except (ValueError, TypeError):
@@ -26,11 +25,12 @@ def safe_parse_date(date_str):
 # ----------------- AI Functions -----------------
 def suggest_priority(title, description="", due_date=None):
     """
-    Returns AI suggestion string with Priority + Reason.
+    Use OpenAI to suggest a priority level (High / Medium / Low)
+    based on task content and due date.
     """
     today = datetime.today().strftime("%Y-%m-%d")
     prompt = f"""
-You are an assistant that assigns task priorities (High, Medium, Low).
+You are an assistant that assigns task priorities: High, Medium, or Low.
 
 Today's date: {today}
 Task Title: {title}
@@ -39,53 +39,69 @@ Due Date: {due_date}
 
 Rules:
 - If due date is within 2 days → High priority.
-- If important keywords (doctor, exam, rent, bill, surgery, project) → High.
-- If due date is within 7 days → Medium.
-- Otherwise → Low.
+- If due date is within 7 days → Medium priority.
+- If keywords like doctor, exam, rent, bill, surgery, project, meeting, deadline appear → High priority.
+- Otherwise → Low priority.
 
-Respond with:
-- Priority: <High/Medium/Low>
-- Reason: <short explanation>
+Respond concisely with:
+Priority: <High/Medium/Low>
+Reason: <short explanation>
 """
 
-    response = client.chat.completions.create(
-        model="gpt-5-mini",
-        messages=[{"role": "user", "content": prompt}]
-    )
-
-    if not response.choices:
-        return "Priority: Medium\nReason: Default fallback (no response)."
-
-    reply = response.choices[0].message.content.strip()
-    return reply
+    try:
+        response = client.chat.completions.create(
+            model="gpt-5-mini",
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0
+        )
+        reply = response.choices[0].message.content.strip()
+        return reply
+    except Exception as e:
+        # 🔁 Smart local fallback (handles "tomorrow" correctly)
+        try:
+            today_dt = datetime.today()
+            if due_date:
+                due_dt = datetime.strptime(due_date, "%Y-%m-%d")
+                days_left = (due_dt - today_dt).days
+                if days_left <= 2:
+                    return "Priority: High\nReason: due in ≤2 days (local fallback)."
+                elif days_left <= 7:
+                    return "Priority: Medium\nReason: due in ≤7 days (local fallback)."
+            # keyword fallback
+            text = f"{title} {description}".lower()
+            if any(k in text for k in ["doctor", "exam", "surgery", "rent", "bill", "deadline", "project", "meeting"]):
+                return "Priority: High\nReason: urgent keyword (local fallback)."
+            return "Priority: Low\nReason: no urgency signals (local fallback)."
+        except Exception:
+            return "Priority: Medium\nReason: Default fallback (error during generation)."
 
 
 def extract_priority(ai_response):
-    """
-    Extract only High/Medium/Low from AI response.
-    """
+    """Extract only the priority level (High/Medium/Low) from AI response."""
     try:
-        return ai_response.split("\n")[0].replace("Priority:", "").strip()
+        line = ai_response.split("\n")[0].replace("Priority:", "").strip()
+        if line in {"High", "Medium", "Low"}:
+            return line
+        return "Medium"
     except Exception:
-        return "Medium"  # fallback
+        return "Medium"
 
 
 # ----------------- Priority Evaluation -----------------
 def get_effective_priority(task):
     """
-    Dynamically calculate effective priority (AI + reminders + keywords).
-    Handles invalid or missing dates gracefully.
+    Dynamically compute effective priority using due date, reminders, and keywords.
+    Safe fallback if AI is unavailable.
     """
     title = task.get("title", "").lower()
     description = task.get("description", "").lower()
     category = task.get("category", "").lower()
-    due_date_str = task.get("due_date", None)
+    due_date_str = task.get("due_date")
     reminder_days = task.get("reminder_days", 1)
 
     priority = "Low"
     reason = []
 
-    # Due date check
     if due_date_str:
         due_date = safe_parse_date(due_date_str)
         if due_date:
@@ -101,17 +117,19 @@ def get_effective_priority(task):
             else:
                 reason.append(f"due in {days_left} days")
 
-            # Reminder check
+            # Reminder effect
             reminder_date = due_date - timedelta(days=reminder_days)
             if today >= reminder_date and priority != "High":
                 priority = "High"
-                reason.append(f"reminder triggered (reminder_days={reminder_days})")
+                reason.append(f"reminder triggered ({reminder_days}d before)")
         else:
-            reason.append("invalid due date format")
+            reason.append("invalid or missing due date")
 
-    # Urgent keywords
-    urgent_keywords = ["doctor", "appointment", "exam", "surgery", "meeting",
-                       "interview", "deadline", "project"]
+    # Keyword check
+    urgent_keywords = [
+        "doctor", "appointment", "exam", "surgery", "meeting",
+        "interview", "deadline", "project", "bill", "payment"
+    ]
     for kw in urgent_keywords:
         if kw in title or kw in description or kw in category:
             priority = "High"
@@ -131,18 +149,33 @@ def predict_auto_renew(title, description=""):
     Returns 'Yes' or 'No'.
     """
     prompt = f"""
-You are an assistant that detects recurring tasks.
+You are an assistant that determines if a task repeats weekly.
+If the task seems like a recurring household, work, or school task, reply 'Yes'.
+Otherwise reply 'No'.
+
 Task Title: {title}
 Description: {description}
-Does this task repeat weekly or should it auto-add? Respond 'Yes' or 'No'.
+
+Answer with only 'Yes' or 'No'.
 """
-    response = client.chat.completions.create(
-        model="gpt-5-mini" if "gpt-5-mini" in client.models.list() else "gpt-4o-mini",
-        messages=[{"role": "user", "content": prompt}]
-    )
 
-    if not response.choices:
+    try:
+        response = client.chat.completions.create(
+            model="gpt-5-mini",
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0
+        )
+    except Exception:
+        # ✅ Fallback to gpt-4o-mini if gpt-5-mini not available
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0
+        )
+
+    try:
+        reply = response.choices[0].message.content.strip().lower()
+        return "Yes" if "yes" in reply else "No"
+    except Exception as e:
+        print(f"⚠️ Auto-renew AI check failed: {e}")
         return "No"
-
-    reply = response.choices[0].message.content.strip().lower()
-    return "Yes" if "yes" in reply else "No"
