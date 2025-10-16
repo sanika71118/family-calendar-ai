@@ -11,3 +11,6 @@ streamlit-calendar
 streamlit-aggrid
 streamlit-javascript
 colorama
+python-dotenv
+pydantic
+requests
