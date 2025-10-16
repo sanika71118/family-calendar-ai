@@ -10,3 +10,4 @@ plotly
 streamlit-calendar
 streamlit-aggrid
 streamlit-javascript
+colorama
