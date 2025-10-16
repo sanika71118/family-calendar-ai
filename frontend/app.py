@@ -354,7 +354,8 @@ elif page == "📊 Analytics":
 # ====================================================
 
 # --- Ensure due_date is datetime ---
-if 'due_date' in df.columns:
+if "df" in locals() and not df.empty and "due_date" in df.columns:
+
     df['due_date'] = pd.to_datetime(df['due_date'], errors='coerce')
 
 # --- Safe filtering logic ---
