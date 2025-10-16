@@ -77,72 +77,57 @@ if page == "📅 Calendar":
     # ----------------------------- ADD TASK -----------------------------
     if action == "➕ Add Task":
         st.markdown("### ➕ Add New Task")
+
+        # --- Input fields ---
         title = st.text_input("Title")
         description = st.text_area("Description")
         category = st.text_input("Category")
         due_date = st.date_input("Due Date (optional)", value=None)
         due_date = due_date.strftime("%Y-%m-%d") if due_date else None
-        priority = st.selectbox("Priority", ["Low", "Medium", "High"], index=1)
-        reminder_days = st.number_input("Reminder Days", min_value=0, value=1)
 
-        if st.button("✅ Add Task"):
-            try:
-                data = {
-                    "title": title,
-                    "description": description,
-                    "category": category,
-                    "due_date": due_date,
-                    "priority": priority,
-                    "reminder_days": reminder_days,
-                }
-                r = requests.post(f"{API_BASE}/tasks", json=data)
-                if r.status_code == 200:
-                    st.success("✅ Task added successfully!")
-                    st.session_state["refresh_summary"] = True
-                else:
-                    st.error(f"⚠️ Failed to add task ({r.status_code})")
-            except Exception as e:
-                st.error(f"❌ Error: {e}")
+    # --- AI Suggestion Section ---
+    if st.button("🤖 Suggest Priority", key="ai_priority_button"):
+        try:
+            payload = {"title": title, "description": description, "due_date": due_date}
+            resp = requests.post(f"{API_BASE}/ai/priority", json=payload)
+            if resp.status_code == 200:
+                result = resp.json()
+                st.session_state["ai_priority"] = result.get("priority", "Medium")
+                st.session_state["ai_reason"] = result.get("ai_response", "")
+                st.success(f"AI Suggested Priority: **{st.session_state['ai_priority']}**")
+                st.caption(f"💡 {st.session_state['ai_reason']}")
+            else:
+                st.warning("⚠️ AI service returned an error.")
+        except Exception as e:
+            st.error(f"AI Error: {e}")
 
-    # ----------------------------- UPDATE TASK -----------------------------
-    elif action == "✏️ Update Task":
-        if not tasks:
-            st.info("No tasks found to update.")
-        else:
-            st.markdown("### ✏️ Update Task")
-            task_choices = {f"{t['title']} (ID: {t['task_id']})": t["task_id"] for t in tasks}
-            selected_task = st.selectbox("Select Task", list(task_choices.keys()))
-            task_id = task_choices[selected_task]
+    # Default or AI-suggested priority
+    default_priority = st.session_state.get("ai_priority", "Medium")
+    priority = st.selectbox("Priority", ["Low", "Medium", "High"], index=["Low", "Medium", "High"].index(default_priority))
 
-            updates = {}
-            new_title = st.text_input("New Title")
-            new_description = st.text_area("New Description")
-            new_category = st.text_input("New Category")
-            new_due_date = st.date_input("New Due Date", value=None)
-            new_due_date = new_due_date.strftime("%Y-%m-%d") if new_due_date else None
-            new_priority = st.selectbox("New Priority", ["", "Low", "Medium", "High"])
-            new_status = st.selectbox("New Status", ["", "Pending", "Completed"])
+    reminder_days = st.number_input("Reminder Days", min_value=0, value=1, step=1)
 
-            if new_title: updates["title"] = new_title
-            if new_description: updates["description"] = new_description
-            if new_category: updates["category"] = new_category
-            if new_due_date: updates["due_date"] = new_due_date
-            if new_priority: updates["priority"] = new_priority
-            if new_status: updates["status"] = new_status
+    if st.button("✅ Add Task"):
+        try:
+            data = {
+                "title": title,
+                "description": description,
+                "category": category,
+                "due_date": due_date,
+                "priority": priority,
+                "reminder_days": reminder_days,
+            }
+            r = requests.post(f"{API_BASE}/tasks", json=data)
+            if r.status_code == 200:
+                st.success("✅ Task added successfully!")
+                st.session_state["refresh_summary"] = True
+                st.session_state.pop("ai_priority", None)
+                st.session_state.pop("ai_reason", None)
+            else:
+                st.error(f"⚠️ Failed to add task ({r.status_code})")
+        except Exception as e:
+            st.error(f"❌ Error: {e}")
 
-            if st.button("💾 Save Changes"):
-                if not updates:
-                    st.warning("No changes made.")
-                else:
-                    try:
-                        resp = requests.patch(f"{API_BASE}/tasks/{task_id}", json=updates)
-                        if resp.status_code == 200:
-                            st.success("✅ Task updated successfully!")
-                            st.session_state["refresh_summary"] = True
-                        else:
-                            st.error("⚠️ Failed to update task.")
-                    except Exception as e:
-                        st.error(f"❌ Error: {e}")
 
     # ----------------------------- DELETE TASK -----------------------------
     elif action == "🗑️ Delete Task":
