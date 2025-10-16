@@ -347,6 +347,101 @@ elif page == "📊 Analytics":
 
 
 
+
+
+# ====================================================
+# 📈 KPI METRICS & CHARTS SECTION 
+# ====================================================
+
+# --- Ensure due_date is datetime ---
+if 'due_date' in df.columns:
+    df['due_date'] = pd.to_datetime(df['due_date'], errors='coerce')
+
+# --- Safe filtering logic ---
+if 'df' in locals() and not df.empty:
+    df_filtered = df[
+        (df['due_date'] >= pd.to_datetime(start_date))
+        & (df['due_date'] <= pd.to_datetime(end_date))
+    ]
+else:
+    df_filtered = pd.DataFrame()
+
+# --- Show message if no data ---
+if df_filtered.empty:
+    st.warning("⚠️ No data available for the selected range.")
+else:
+    st.markdown("### 📊 Task Analytics")
+
+    # --- Compute KPIs ---
+    total = len(df_filtered)
+    completed = len(df_filtered[df_filtered['status'].str.lower() == "completed"])
+    overdue = len(df_filtered[
+        (df_filtered['due_date'] < today) &
+        (df_filtered['status'].str.lower() != "completed")
+    ])
+    recurring = len(df_filtered[
+        df_filtered['title'].str.contains("weekly|every", case=False, na=False)
+    ])
+
+    completion_rate = round((completed / total) * 100, 1)
+    overdue_rate = round((overdue / total) * 100, 1)
+    recurring_rate = round((recurring / total) * 100, 1)
+
+    col1, col2, col3 = st.columns(3)
+    col1.metric("✅ Completion Rate", f"{completion_rate}%")
+    col2.metric("⚠️ Overdue Rate", f"{overdue_rate}%")
+    col3.metric("🔁 Recurring Tasks", f"{recurring_rate}%")
+
+    st.markdown("---")
+
+    # ====================================================
+    # 📉 VISUAL CHARTS
+    # ====================================================
+
+    # Priority Distribution
+    if "priority" in df_filtered.columns:
+        fig1 = px.pie(
+            df_filtered,
+            names="priority",
+            title="Priority Distribution",
+            hole=0.4,
+            color_discrete_sequence=px.colors.qualitative.Pastel
+        )
+        st.plotly_chart(fig1, use_container_width=True)
+
+    # Task Status Overview
+    fig2 = px.bar(
+        df_filtered,
+        x="status",
+        color="status",
+        title="Task Status Overview",
+        text_auto=True,
+        color_discrete_sequence=px.colors.qualitative.Vivid
+    )
+    st.plotly_chart(fig2, use_container_width=True)
+
+    # Tasks Over Time
+    if "due_date" in df_filtered.columns:
+        time_trend = df_filtered.groupby(
+            [df_filtered['due_date'].dt.date, 'status']
+        ).size().reset_index(name='count')
+        fig3 = px.line(
+            time_trend,
+            x="due_date",
+            y="count",
+            color="status",
+            title="Tasks Over Time by Status",
+            markers=True,
+            color_discrete_sequence=px.colors.qualitative.Bold
+        )
+        st.plotly_chart(fig3, use_container_width=True)
+
+
+
+
+
+
+
 # -----------------------------
 # 🧠 AI SUMMARY SECTION (Styled)
 # -----------------------------
@@ -443,94 +538,3 @@ if st.session_state.get("refresh_summary", False):
         st.session_state["refresh_summary"] = False
 
 
-
-
-
-
-
-# ====================================================
-# 📈 KPI METRICS & CHARTS SECTION (Directly Below Filter)
-# ====================================================
-
-# --- Ensure due_date is datetime ---
-if 'due_date' in df.columns:
-    df['due_date'] = pd.to_datetime(df['due_date'], errors='coerce')
-
-# --- Safe filtering logic ---
-if 'df' in locals() and not df.empty:
-    df_filtered = df[
-        (df['due_date'] >= pd.to_datetime(start_date))
-        & (df['due_date'] <= pd.to_datetime(end_date))
-    ]
-else:
-    df_filtered = pd.DataFrame()
-
-# --- Show message if no data ---
-if df_filtered.empty:
-    st.warning("⚠️ No data available for the selected range.")
-else:
-    st.markdown("### 📊 Task Analytics")
-
-    # --- Compute KPIs ---
-    total = len(df_filtered)
-    completed = len(df_filtered[df_filtered['status'].str.lower() == "completed"])
-    overdue = len(df_filtered[
-        (df_filtered['due_date'] < today) &
-        (df_filtered['status'].str.lower() != "completed")
-    ])
-    recurring = len(df_filtered[
-        df_filtered['title'].str.contains("weekly|every", case=False, na=False)
-    ])
-
-    completion_rate = round((completed / total) * 100, 1)
-    overdue_rate = round((overdue / total) * 100, 1)
-    recurring_rate = round((recurring / total) * 100, 1)
-
-    col1, col2, col3 = st.columns(3)
-    col1.metric("✅ Completion Rate", f"{completion_rate}%")
-    col2.metric("⚠️ Overdue Rate", f"{overdue_rate}%")
-    col3.metric("🔁 Recurring Tasks", f"{recurring_rate}%")
-
-    st.markdown("---")
-
-    # ====================================================
-    # 📉 VISUAL CHARTS
-    # ====================================================
-
-    # Priority Distribution
-    if "priority" in df_filtered.columns:
-        fig1 = px.pie(
-            df_filtered,
-            names="priority",
-            title="Priority Distribution",
-            hole=0.4,
-            color_discrete_sequence=px.colors.qualitative.Pastel
-        )
-        st.plotly_chart(fig1, use_container_width=True)
-
-    # Task Status Overview
-    fig2 = px.bar(
-        df_filtered,
-        x="status",
-        color="status",
-        title="Task Status Overview",
-        text_auto=True,
-        color_discrete_sequence=px.colors.qualitative.Vivid
-    )
-    st.plotly_chart(fig2, use_container_width=True)
-
-    # Tasks Over Time
-    if "due_date" in df_filtered.columns:
-        time_trend = df_filtered.groupby(
-            [df_filtered['due_date'].dt.date, 'status']
-        ).size().reset_index(name='count')
-        fig3 = px.line(
-            time_trend,
-            x="due_date",
-            y="count",
-            color="status",
-            title="Tasks Over Time by Status",
-            markers=True,
-            color_discrete_sequence=px.colors.qualitative.Bold
-        )
-        st.plotly_chart(fig3, use_container_width=True)
