@@ -4,7 +4,9 @@ import pandas as pd
 from streamlit_calendar import calendar as st_calendar
 import plotly.express as px
 
-API_BASE = "http://127.0.0.1:8000"
+
+import os, streamlit as st
+API_BASE = st.secrets.get("API_BASE") or os.environ.get("API_BASE") or "http://127.0.0.1:8000"
 
 # ----------------------------------------------------
 # PAGE CONFIG
