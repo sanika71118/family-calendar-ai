@@ -354,9 +354,10 @@ elif page == "📊 Analytics":
 # ====================================================
 
 # --- Ensure due_date is datetime ---
-if "df" in locals() and not df.empty and "due_date" in df.columns:
 
+if "df" in locals() and not df.empty and "due_date" in df.columns:
     df['due_date'] = pd.to_datetime(df['due_date'], errors='coerce')
+
 
 # --- Safe filtering logic ---
 if 'df' in locals() and not df.empty:
@@ -367,11 +368,6 @@ if 'df' in locals() and not df.empty:
 else:
     df_filtered = pd.DataFrame()
 
-# --- Show message if no data ---
-if df_filtered.empty:
-    st.warning("⚠️ No data available for the selected range.")
-else:
-    st.markdown("### 📊 Task Analytics")
 
     # --- Compute KPIs ---
     total = len(df_filtered)
