@@ -74,19 +74,20 @@ if page == "📅 Calendar":
         index=0,
     )
 
-    # ----------------------------- ADD TASK -----------------------------
-    if action == "➕ Add Task":
-        st.markdown("### ➕ Add New Task")
+# ----------------------------- ADD TASK -----------------------------
+if action == "➕ Add Task":
+    st.markdown("### ➕ Add New Task")
 
-        # --- Input fields ---
-        title = st.text_input("Title")
-        description = st.text_area("Description")
-        category = st.text_input("Category")
-        due_date = st.date_input("Due Date (optional)", value=None)
-        due_date = due_date.strftime("%Y-%m-%d") if due_date else None
+    # --- Input fields ---
+    title = st.text_input("Title")
+    description = st.text_area("Description")
+    category = st.text_input("Category")
+    due_date = st.date_input("Due Date (optional)", value=None)
+    due_date = due_date.strftime("%Y-%m-%d") if due_date else None
 
-    # --- AI Suggestion Section ---
-    if st.button("🤖 Suggest Priority", key="ai_priority_button"):
+    # --- Only show Suggest Priority inside Add Task ---
+    st.markdown("#### 🤖 AI Priority Suggestion")
+    if st.button("Suggest Priority"):
         try:
             payload = {"title": title, "description": description, "due_date": due_date}
             resp = requests.post(f"{API_BASE}/ai/priority", json=payload)
@@ -94,16 +95,22 @@ if page == "📅 Calendar":
                 result = resp.json()
                 st.session_state["ai_priority"] = result.get("priority", "Medium")
                 st.session_state["ai_reason"] = result.get("ai_response", "")
-                st.success(f"AI Suggested Priority: **{st.session_state['ai_priority']}**")
-                st.caption(f"💡 {st.session_state['ai_reason']}")
+                st.info(
+                    f"🧠 **AI Suggested Priority:** {st.session_state['ai_priority']}\n\n"
+                    f"💡 {st.session_state['ai_reason']}"
+                )
             else:
                 st.warning("⚠️ AI service returned an error.")
         except Exception as e:
             st.error(f"AI Error: {e}")
 
-    # Default or AI-suggested priority
+    # --- Default or AI-filled priority ---
     default_priority = st.session_state.get("ai_priority", "Medium")
-    priority = st.selectbox("Priority", ["Low", "Medium", "High"], index=["Low", "Medium", "High"].index(default_priority))
+    priority = st.selectbox(
+        "Priority",
+        ["Low", "Medium", "High"],
+        index=["Low", "Medium", "High"].index(default_priority),
+    )
 
     reminder_days = st.number_input("Reminder Days", min_value=0, value=1, step=1)
 
@@ -121,6 +128,7 @@ if page == "📅 Calendar":
             if r.status_code == 200:
                 st.success("✅ Task added successfully!")
                 st.session_state["refresh_summary"] = True
+                # clear AI suggestion after task added
                 st.session_state.pop("ai_priority", None)
                 st.session_state.pop("ai_reason", None)
             else:
