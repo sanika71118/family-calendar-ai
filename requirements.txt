@@ -5,9 +5,8 @@ pandas
 numpy
 tabulate
 openai
-langchain openai
-
-
-
-
-pip install fastapi uvicorn streamlit pandas numpy tabulate openai langchain openai
+langchain
+plotly
+streamlit-calendar
+streamlit-aggrid
+streamlit-javascript

@@ -182,3 +182,103 @@ def recurring_suggestions():
         return {"suggestions": suggestions}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+    
+
+
+
+# ----------------- AI SUMMARY (Enhanced) -----------------
+from openai import OpenAI
+import pandas as pd
+import sqlite3
+from datetime import datetime
+from backend.task_manager import DB_PATH
+
+client = OpenAI()
+
+@app.get("/ai/summary")
+def ai_summary():
+    """Generate a natural-language summary and structured insights of current task status."""
+    try:
+        # --- Load all tasks from DB ---
+        with sqlite3.connect(DB_PATH) as conn:
+            df = pd.read_sql_query("SELECT * FROM tasks", conn)
+
+        if df.empty:
+            return {
+                "summary": "No tasks found yet — your calendar is clear! 🎉",
+                "stats": {}
+            }
+
+        df["due_date"] = pd.to_datetime(df["due_date"], errors="coerce")
+        today = datetime.now().date()
+
+        # --- Core stats ---
+        total = len(df)
+        completed = len(df[df["status"].str.lower() == "completed"])
+        overdue_df = df[
+            (df["due_date"].notna())
+            & (df["due_date"] < pd.Timestamp(today))
+            & (df["status"].str.lower() != "completed")
+        ]
+        overdue_count = len(overdue_df)
+
+        # --- Category summary ---
+        if "category" in df.columns and df["category"].notna().any():
+            category_summary = (
+                df.groupby("category")["status"]
+                .apply(lambda x: f"{(x.str.lower() == 'completed').sum()} of {len(x)} completed")
+                .to_dict()
+            )
+            category_text = "\n".join([f"• {cat}: {summary}" for cat, summary in category_summary.items()])
+        else:
+            category_summary = {}
+            category_text = "No category breakdown available."
+
+        # --- High-priority upcoming tasks ---
+        top_tasks = (
+            df[df["priority"].str.lower() == "high"]
+            .sort_values("due_date")
+            .head(3)
+        )
+
+        # --- AI prompt ---
+        prompt = f"""
+You are a motivating productivity coach helping summarize a family's to-do list.
+Speak warmly, positively, and concisely.
+
+Today is {today}.
+Total tasks: {total}, Completed: {completed}, Overdue: {overdue_count}.
+
+Category breakdown:
+{category_text}
+
+High-priority upcoming tasks:
+{top_tasks[['title','due_date','status']].to_string(index=False)}
+
+Write a 3–5 sentence summary that:
+1. Comments on completion progress and overdue items.
+2. Highlights at least one or two categories with good progress.
+3. Mentions overdue or critical tasks by name (if any).
+4. Ends with a short motivational line (encouraging tone).
+"""
+
+        # --- Generate with GPT ---
+        response = client.chat.completions.create(
+            model="gpt-5-mini",
+            messages=[{"role": "user", "content": prompt}]
+        )
+
+        summary = response.choices[0].message.content.strip()
+
+        return {
+            "summary": summary,
+            "stats": {
+                "total": total,
+                "completed": completed,
+                "overdue": overdue_count,
+                "categories": category_summary
+            }
+        }
+
+    except Exception as e:
+        return {"summary": f"⚠️ Error generating summary: {e}", "stats": {}}

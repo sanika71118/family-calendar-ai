@@ -162,6 +162,8 @@ if page == "📅 Calendar":
                 if r.status_code == 200:
                     st.success(r.json().get("message", "Task added successfully!"))
                     st.toast("✅ Task added — refresh calendar to view it.")
+                    st.session_state["refresh_summary"] = True   # auto-update AI Summary
+
                 else:
                     st.error(f"⚠️ Failed to add task ({r.status_code})")
             except Exception as e:
@@ -204,6 +206,8 @@ if page == "📅 Calendar":
                         if resp.status_code == 200:
                             st.success("✅ Task updated successfully!")
                             st.toast("Task updated — refresh calendar to view changes.")
+                            st.session_state["refresh_summary"] = True
+
                         else:
                             st.error("⚠️ Failed to update task.")
                     except Exception as e:
@@ -226,6 +230,8 @@ if page == "📅 Calendar":
                     if resp.status_code == 200:
                         st.success(f"🧹 Task {task_id} deleted successfully!")
                         st.toast("Task deleted — refresh calendar to view changes.")
+                        st.session_state["refresh_summary"] = True
+
                     else:
                         st.error("⚠️ Failed to delete task.")
                 except Exception as e:
@@ -335,6 +341,106 @@ elif page == "📊 Analytics":
         st.markdown(
             f"Showing data from **{start_date}** to **{end_date}** — {len(df_filtered)} tasks."
         )
+
+
+
+
+# -----------------------------
+# 🧠 AI SUMMARY SECTION (Styled)
+# -----------------------------
+import streamlit as st
+
+st.markdown("---")
+st.subheader("🧠 AI Summary")
+
+# --- Define helper to fetch summary ---
+def fetch_ai_summary():
+    try:
+        resp = requests.get(f"{API_BASE}/ai/summary")
+        if resp.status_code == 200:
+            data = resp.json()
+            return data
+        else:
+            st.error("⚠️ Failed to generate summary.")
+            return None
+    except Exception as e:
+        st.error(f"❌ Error: {e}")
+        return None
+
+# --- Auto-refresh trigger key (updates when tasks change) ---
+if "refresh_summary" not in st.session_state:
+    st.session_state["refresh_summary"] = False
+
+# --- AI Summary button (manual trigger still available) ---
+if st.button("✨ Generate Smart Summary"):
+    st.session_state["refresh_summary"] = True
+
+# --- Auto refresh if user added/updated/deleted tasks ---
+# When tasks are modified, update st.session_state["refresh_summary"] = True in those sections.
+if st.session_state.get("refresh_summary", False):
+    data = fetch_ai_summary()
+    if data:
+        st.success("✅ Summary updated!")
+        st.markdown(data.get("summary", ""))
+
+        # --- Styled Stats Overview ---
+        st.markdown("### 📊 Stats Overview")
+        stats = data.get("stats", {})
+
+        if stats:
+            total = stats.get("total", 0)
+            completed = stats.get("completed", 0)
+            overdue = stats.get("overdue", 0)
+            categories = stats.get("categories", {})
+
+            col1, col2, col3 = st.columns(3)
+
+            col1.markdown(
+                f"""
+                <div style='background-color:#e8f4fd;padding:15px;border-radius:10px;text-align:center;'>
+                <h3>🗂️ Total</h3>
+                <h2 style='color:#0078D7'>{total}</h2>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+
+            col2.markdown(
+                f"""
+                <div style='background-color:#eafbea;padding:15px;border-radius:10px;text-align:center;'>
+                <h3>✅ Completed</h3>
+                <h2 style='color:#1E8449'>{completed}</h2>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+
+            col3.markdown(
+                f"""
+                <div style='background-color:#fff3e0;padding:15px;border-radius:10px;text-align:center;'>
+                <h3>⚠️ Overdue</h3>
+                <h2 style='color:#E67E22'>{overdue}</h2>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+
+            # --- Category breakdown paragraph ---
+            if categories:
+                category_lines = []
+                for cat, summary in categories.items():
+                    label = cat if cat.strip() else "Uncategorized"
+                    category_lines.append(f"**{label}** — {summary}")
+                category_text = " | ".join(category_lines)
+                st.markdown(f"**Category breakdown:** {category_text}")
+
+        else:
+            st.info("No stats available yet.")
+
+        # Reset refresh trigger
+        st.session_state["refresh_summary"] = False
+
+
 
         # ====================================================
         # 📈 KPI METRICS & CHARTS
