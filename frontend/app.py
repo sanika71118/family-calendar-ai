@@ -444,11 +444,21 @@ if st.session_state.get("refresh_summary", False):
 
 
 
+
         # ====================================================
         # 📈 KPI METRICS & CHARTS
         # ====================================================
+        if 'df' in locals() and not df.empty:
+            df_filtered = df[
+                (df['due_date'] >= pd.to_datetime(start_date))
+                & (df['due_date'] <= pd.to_datetime(end_date))
+            ]
+        else:
+            df_filtered = pd.DataFrame()
+
+        # Prevent NameError
         if df_filtered.empty:
-            st.warning("⚠️ No tasks found in this range.")
+            st.warning("⚠️ No data available for the selected range.")
         else:
             total = len(df_filtered)
             completed = len(
