@@ -14,6 +14,7 @@ from backend.task_manager import (
 )
 from backend.ai_agent import suggest_priority, extract_priority, predict_auto_renew
 
+# Initialize OpenAI
 client = OpenAI()
 
 # =====================================================
@@ -23,7 +24,7 @@ app = FastAPI(title="Family Calendar AI API", version="2.0")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],   # you can restrict this later
+    allow_origins=["*"],
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -31,6 +32,7 @@ app.add_middleware(
 @app.on_event("startup")
 def startup_event():
     init_db()
+    init_user_db()
 
 
 # =====================================================
@@ -56,6 +58,7 @@ class User(BaseModel):
 USERS_DB = "database/users.db"
 
 def init_user_db():
+    """Create users table if not exists"""
     os.makedirs("database", exist_ok=True)
     with sqlite3.connect(USERS_DB) as conn:
         conn.execute("""
@@ -66,10 +69,8 @@ def init_user_db():
         """)
         conn.commit()
 
-init_user_db()
 
-
-@app.post("/register")
+@app.post("/auth/register")
 def register_user(user: User):
     """Register a new user by email."""
     try:
@@ -78,6 +79,22 @@ def register_user(user: User):
             c.execute("INSERT OR IGNORE INTO users (email) VALUES (?)", (user.email,))
             conn.commit()
         return {"message": f"✅ Registered {user.email} successfully!"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/auth/login")
+def login_user(user: User):
+    """Login endpoint — simply validates user exists."""
+    try:
+        with sqlite3.connect(USERS_DB) as conn:
+            c = conn.cursor()
+            c.execute("SELECT email FROM users WHERE email=?", (user.email,))
+            found = c.fetchone()
+        if found:
+            return {"access_token": user.email, "message": "Login successful"}
+        else:
+            raise HTTPException(status_code=401, detail="User not found. Please register first.")
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -105,17 +122,20 @@ def create_task(task: Task, user_email: str = Depends(get_user_email)):
 
 
 # =====================================================
-# 📦 Get Tasks
+# 📦 Get Tasks (Calendar Display)
 # =====================================================
 @app.get("/tasks")
 def get_tasks(user_email: str = Depends(get_user_email)):
+    """Fetch tasks belonging to a single user (for calendar display)."""
     try:
         with sqlite3.connect(DB_PATH) as conn:
             c = conn.cursor()
             c.execute("""
                 SELECT task_id, title, description, category, due_date,
                        priority, reminder_days, status
-                FROM tasks WHERE user_email=? ORDER BY due_date
+                FROM tasks
+                WHERE user_email=?
+                ORDER BY due_date
             """, (user_email,))
             rows = c.fetchall()
 
@@ -206,7 +226,6 @@ def ai_summary(user_email: str = Depends(get_user_email)):
     try:
         stats = get_summary_stats(user_email)
 
-        # Build a readable summary for GPT
         prompt = f"""
 You are a warm productivity coach summarizing this user's family tasks.
 
@@ -214,10 +233,10 @@ Stats:
 Total: {stats['total']}, Completed: {stats['completed']}, Overdue: {stats['overdue']}.
 Categories: {stats['categories']}
 
-Write a friendly, encouraging 3-5 sentence summary that:
+Write a friendly, encouraging 3–5 sentence summary that:
 - Mentions progress and overdue items
 - Highlights strong categories
-- Ends with motivation
+- Ends with motivation.
 """
 
         response = client.chat.completions.create(
@@ -236,4 +255,4 @@ Write a friendly, encouraging 3-5 sentence summary that:
 # =====================================================
 @app.get("/")
 def root():
-    return {"message": "✅ Family Calendar API v2 running!"}
+    return {"message": "✅ Family Calendar AI API v2 running successfully!"}
