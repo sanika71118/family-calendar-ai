@@ -41,7 +41,9 @@ if not st.session_state["user_email"]:
                 # no password — just trust email for now
                 st.session_state["user_email"] = email.strip().lower()
                 st.success(f"Welcome back, {email}! 🎉")
-                st.experimental_rerun()
+                st.success("Logged in ✅")
+                st.rerun()
+
 
     st.stop()
 
